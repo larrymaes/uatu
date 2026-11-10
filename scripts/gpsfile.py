@@ -35,8 +35,7 @@ def expected_columns(header):
         if isinstance(value, dict):
             _, stop = column_range(header, key)
 
-            if stop > highest_stop:
-                highest_stop = stop
+            highest_stop = max(highest_stop, stop)
     return highest_stop
 
 
