@@ -1,6 +1,23 @@
 """gpsfile.py: read LANL GPS particle data files (JSON header + whitespace columns)."""
 
 import json
+import sys
+
+import numpy as np
+
+
+def read_data(path):
+    """Return the data rows as a 2D numpy array (one row per time bin)."""
+    return np.loadtxt(path, comments="#")
+
+
+def get_variable(data, header, name):
+    """Return one variable's columns, with fill values replaced by NaN."""
+    start, end = column_range(header, name)
+    variables = data[:, start:end].copy()
+    fill = header[name]["FILL_VALUE"]
+    variables[variables == fill] = np.nan
+    return variables
 
 
 def read_header(path):
@@ -40,28 +57,20 @@ def expected_columns(header):
 
 
 if __name__ == "__main__":
-    path = "data/raw/ns64_170903_v1.10.ascii"
+    path = sys.argv[1]
+    print(f"File: {path}")
     header = read_header(path)
-
-    print(f"{'Variable Name':28} {'Columns':12} {'Units'}")
-    print("-" * 55)
-    for key, value in header.items():
-        if isinstance(value, dict):
-            start, stop = column_range(header, key)
-            units = value.get("UNITS", "N/A")
-            print(f"{key:28} cols {start:3}-{stop - 1:<3} {units}")
-
-    print("\n" + "=" * 55 + "\n")
-
-    expected = expected_columns(header)
-    print(f"Expected columns (from header): {expected}")
-
-    actual = 0
-    with open(path) as file:
-        for line in file:
-            if not line.startswith("#"):
-                actual = len(line.split())
-                break
-
-    print(f"Actual columns (first data row): {actual}")
-    print(f"Do the two numbers match? {'Yes' if expected == actual else 'No'}")
+    data = read_data(path)
+    print(data.shape)
+    dropped = get_variable(data, header, "dropped_data")[:, 0]
+    mask = dropped == 1
+    print(f"Bad rows: {np.sum(mask)}")
+    print(f"Good rows: {len(dropped) - np.sum(mask)}")
+    print(f"Unknown rows: {np.sum(np.isnan(dropped))}")
+    all_activity = get_variable(data, header, "proton_activity")[:, 0]
+    print(f"Proton activity in bad rows: {np.sum(all_activity[mask] == 1)}")
+    data = data[~mask]
+    activity = get_variable(data, header, "proton_activity")[:, 0]
+    print(f"Proton activity rows: {np.sum(activity == 1)}")
+    rates = get_variable(data, header, "rate_proton_measured")
+    print("Max proton rate per channel (P1–P5):", np.nanmax(rates, axis=0))
